@@ -1,0 +1,26 @@
+plugins {
+    id 'java-library'
+}
+apply plugin : "java"
+
+ext {
+    javaMainClass = "KooltraSample"
+}
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    compile project(':sf-ws-client')
+    compile(group: 'com.force.api', name: 'force-wsc', version: '46.0.0')
+    compile(group: 'org.cometd.java', name: 'cometd-java-client', version: '4.0.8')
+
+}
+
+task run(type: JavaExec) {
+    group = "Execution"
+    description = "Run the main class with JavaExecTask"
+    classpath = sourceSets.main.runtimeClasspath
+    main = javaMainClass
+}

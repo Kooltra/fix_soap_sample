@@ -1,0 +1,64 @@
+import org.gradle.internal.logging.text.StyledTextOutputFactory
+
+import static org.gradle.internal.logging.text.StyledTextOutput.Style
+
+def stdout = services.get(StyledTextOutputFactory).create("stdout")
+
+apply plugin : "java"
+
+repositories {
+    jcenter()
+}
+
+
+configurations {
+    // Configuration to generate Java Classes from WSDL
+    wsc
+}
+
+def force_wsc_version = "46.0.0"
+def wsdlGeneratedClassesJar = "./build/generated-classes-from-wsdl/" + project.name + "-" + version + ".jar"
+
+dependencies {
+    // Salesforce web service connector used to generate java classes
+    wsc("com.force.api:force-wsc:${force_wsc_version}:uber")
+    compile files(wsdlGeneratedClassesJar)
+}
+
+
+task copyLibs(type: Copy) {
+    from configurations.wsc
+    into './build/wsc'
+}
+
+task generateJavaClassesFromWsdl(dependsOn: copyLibs) {
+    doFirst {
+        stdout.style(Style.Info).println("\nMake sure you have downloaded the latest version of WSDL from staging org!\n")
+        if (!file("./wsdl.xml").exists()) {
+            throw new Exception("Cannot find enterprise wsdl file. Please download it following instructions.")
+        }
+    }
+
+    doLast {
+        exec {
+
+            commandLine "java",
+                    "-classpath", "./build/wsc/force-wsc-${force_wsc_version}-uber.jar",
+                    "com.sforce.ws.tools.wsdlc",
+                    "./wsdl.xml",
+                    wsdlGeneratedClassesJar
+        }
+    }
+}
+
+compileJava {
+    /** Java Classes from WSDL should be generated before compileTask of the project */
+    //dependsOn generateJavaClassesFromWsdl
+}
+
+jar {
+    from {
+        configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+}
+
