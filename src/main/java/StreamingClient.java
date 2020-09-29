@@ -47,7 +47,6 @@ public class StreamingClient {
 
 		client.getChannel(Channel.META_CONNECT).addListener(
 				(MessageListener) (inChannel, message) -> {
-					System.out.println("[CHANNEL:META_CONNECT]: " + message);
 					boolean success = message.isSuccessful();
 					if (!success) {
 						String error = (String) message.get("error");

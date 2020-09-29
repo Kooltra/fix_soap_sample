@@ -5,6 +5,7 @@ import com.sforce.soap.enterprise.sobject.SObject;
 import com.sforce.ws.ConnectionException;
 
 import java.util.Calendar;
+import java.util.Map;
 
 public class KooltraSample {
 	private static final String USERNAME = "YOUR_USERNAME";
@@ -14,12 +15,19 @@ public class KooltraSample {
 
 	private static final String ENTITY_NAME = "Test Entity 1";
 	private static final String ACCOUNT_NAME = "Kooltra Sample";
-	private static final String EVENT_NAME = "Kooltra__ObjectChange__e";
+	private static final String EVENT_NAME = "TradeInserted__e";
+	private static final String EVENT_FIELD_NAME = "TradeId__c";
+	private static final long TRADE_INSERT_PERIOD = 15000;
 
 	public static void main(String[] args) throws Exception {
 		SoapClient client = new SoapClient();
 		client.login(USERNAME, PASSWORD, ENDPOINT);
-		client.startStreaming(EVENT_NAME, (channel, message) -> System.out.println("Received Message: " + message));
+		client.startStreaming(EVENT_NAME, (channel, message) -> {
+			Map<String, String> payload = (Map<String, String>) message.getDataAsMap().get("payload");
+			String tradeId = payload.get(EVENT_FIELD_NAME);
+			System.out.println(EVENT_NAME + " received with id " + tradeId);
+			queryTrade(client, tradeId);
+		});
 
 		String accountId = client.getObjectIdByName("Account", ACCOUNT_NAME);
 		if (accountId == null) {
@@ -27,8 +35,10 @@ public class KooltraSample {
 			accountId = insertAccount(client, ACCOUNT_NAME);
 		}
 
-		insertTrade(client, accountId);
-		queryTrades(client);
+		do {
+			insertTrade(client, accountId);
+			Thread.sleep(TRADE_INSERT_PERIOD);
+		} while (true);
 	}
 
 	private static String insertAccount(SoapClient client, String accountName) throws ConnectionException {
@@ -50,6 +60,7 @@ public class KooltraSample {
 	}
 
 	private static void insertTrade(SoapClient client, String accountId) throws ConnectionException {
+		System.out.println("inserting a Kooltra__FxTrade__c...");
 		Kooltra__FxTrade__c trade = new Kooltra__FxTrade__c();
 		trade.setKooltra__Counterparty__c(accountId);
 		trade.setKooltra__DealtCurrency__c("CAD");
@@ -70,23 +81,29 @@ public class KooltraSample {
 		if (!result.isSuccess()) {
 			throw new RuntimeException(result.getErrors()[0].getMessage());
 		}
+
+		System.out.println("Kooltra__FxTrade__c inserted with id " + result.getId());
 	}
 
-	private static void queryTrades(SoapClient client) throws ConnectionException {
-		for (SObject record : client.getConnection().query("SELECT " +
-				"Name, Kooltra__Counterparty__r.Name, " +
-				"Kooltra__Amount1__c, Kooltra__Currency1__c, " +
-				"Kooltra__Amount2__c, Kooltra__Currency2__c, " +
-				"Kooltra__Status__c " +
-				"FROM Kooltra__FxTrade__c ORDER BY CreatedDate DESC").getRecords()) {
-			Kooltra__FxTrade__c trade = (Kooltra__FxTrade__c) record;
-			System.out.println(
-					trade.getName() + "\t" +
-					trade.getKooltra__Status__c() + "\t" +
-					trade.getKooltra__Counterparty__r().getName() + "\t" +
-					trade.getKooltra__Amount1__c() + " " + trade.getKooltra__Currency1__c() + "\t" +
-					trade.getKooltra__Amount2__c() + " " + trade.getKooltra__Currency2__c()
-			);
+	private static void queryTrade(SoapClient client, String tradeId) {
+		try {
+			for (SObject record : client.getConnection().query("SELECT " +
+					"Name, Kooltra__Counterparty__r.Name, " +
+					"Kooltra__Amount1__c, Kooltra__Currency1__c, " +
+					"Kooltra__Amount2__c, Kooltra__Currency2__c, " +
+					"Kooltra__Status__c " +
+					"FROM Kooltra__FxTrade__c WHERE Id='" + tradeId + "'").getRecords()) {
+				Kooltra__FxTrade__c trade = (Kooltra__FxTrade__c) record;
+				System.out.println(
+						trade.getName() + "\t" +
+						trade.getKooltra__Status__c() + "\t" +
+						trade.getKooltra__Counterparty__r().getName() + "\t" +
+						trade.getKooltra__Amount1__c() + " " + trade.getKooltra__Currency1__c() + "\t" +
+						trade.getKooltra__Amount2__c() + " " + trade.getKooltra__Currency2__c()
+				);
+			}
+		} catch (ConnectionException e) {
+			e.printStackTrace();
 		}
 	}
 }
